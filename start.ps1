@@ -16,14 +16,15 @@ This script automates the full setup of a new project:
 #>
 
 param(
-    [Parameter(Mandatory)]
+    [Parameter(Mandatory, HelpMessage = "Enter the name for your new project")]
+    [ValidateNotNullOrEmpty()]
     [string]$Name,
 
     [string]$Description = "",
 
-    [switch]$Private,
+    [bool]$Private = $true,
 
-    [string]$UseTemplate = "",
+    [string]$UseTemplate = "https://github.com/ewouds/template",
 
     [switch]$OpenVSCode
 )
@@ -42,31 +43,17 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 # --- SET VISIBILITY ---
 $Visibility = if ($Private) { "private" } else { "public" }
 
-# --- CREATE LOCAL FOLDER ---
-if (-not (Test-Path $Name)) {
-    New-Item -ItemType Directory -Path $Name | Out-Null
-}
-Set-Location $Name
-
 # --- INIT OR TEMPLATE CLONE ---
-if ($UseTemplate) {
-    Write-Host "📦 Creating repo from template '$UseTemplate'..."
-    gh repo create $Name --template $UseTemplate --$Visibility --description "$Description" --clone
-    Set-Location $Name
-} else {
-    git init
-    "# $Name`n$Description" | Out-File README.md -Encoding UTF8
-    git add .
-    git commit -m "Initial commit"
-    gh repo create $Name --$Visibility --description "$Description" --source . --remote origin
-    git push -u origin main
-}
+Write-Host "📦 Creating repo from template '$UseTemplate'..."
+gh repo create $Name --template $UseTemplate --$Visibility --description "$Description" --clone
+Set-Location $Name
 
 # --- OPEN IN VS CODE ---
 if ($OpenVSCode) {
     if (Get-Command code -ErrorAction SilentlyContinue) {
         code .
-    } else {
+    }
+    else {
         Write-Host "💡 VS Code not found in PATH. Skipping..."
     }
 }
