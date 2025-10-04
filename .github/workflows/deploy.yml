@@ -1,0 +1,40 @@
+name: EchoSky SWA CI/CD
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches:
+      - master
+
+jobs:
+  build_and_deploy_job:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    runs-on: ubuntu-latest
+    name: Build and Deploy Job
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+          lfs: false
+      - name: Set version in Home.tsx
+        run: |
+          VERSION=$(date +'%Y%m%d').${{ github.run_number }}
+
+          sed -i "s/const VERSION = \".*\";/const VERSION = \"$VERSION\";/" src/main.tsx
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+        env:
+          VAR: ${{ secrets.VAR }}
