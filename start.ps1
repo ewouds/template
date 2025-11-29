@@ -16,7 +16,6 @@ This script automates the full setup of a new project:
 #>
 
 param(
-    [Parameter(Mandatory, HelpMessage = "Enter the name for your new project")]
     [ValidateNotNullOrEmpty()]
     [string]$Name,
 
@@ -28,62 +27,207 @@ param(
 
     [bool]$Private = $true,
 
-    [string]$UseTemplate = "https://github.com/ewouds/template",
-
-    [switch]$OpenVSCode
+    [string]$UseTemplate = "https://github.com/ewouds/template"
 )
 
+# Clear screen for clean display
+Clear-Host
+
+# --- HEADER ---
+Write-Host ""
+Write-Host "================================================================" -ForegroundColor Cyan
+Write-Host "" -ForegroundColor Cyan
+Write-Host "           GitHub Project Setup & Initialization" -ForegroundColor Cyan
+Write-Host "                     v1.0.0" -ForegroundColor Cyan
+Write-Host "" -ForegroundColor Cyan
+Write-Host "================================================================" -ForegroundColor Cyan
+Write-Host ""
+
+# --- INTERACTIVE PARAMETER COLLECTION ---
+if (-not $Name) {
+    Write-Host ">> Project Information" -ForegroundColor Yellow
+    Write-Host ""
+    
+    $ValidName = $false
+    while (-not $ValidName) {
+        Write-Host "   Project Name: " -ForegroundColor Cyan -NoNewline
+        $Name = Read-Host
+        
+        if ([string]::IsNullOrWhiteSpace($Name)) {
+            Write-Host "   [X] Project name cannot be empty! Please try again." -ForegroundColor Red
+            Write-Host ""
+            continue
+        }
+        
+        $TestPath = Join-Path -Path $RootPath -ChildPath $Name
+        if (Test-Path -Path $TestPath) {
+            Write-Host "   [X] Project '$Name' already exists at $TestPath" -ForegroundColor Red
+            Write-Host "   Please choose a different name." -ForegroundColor Yellow
+            Write-Host ""
+            continue
+        }
+        
+        $ValidName = $true
+    }
+    Write-Host ""
+}
+
 # --- PRECHECKS ---
+Write-Host ">> System Prerequisites Check" -ForegroundColor Yellow
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-    Write-Error "[ERROR] GitHub CLI (gh) not found. Install from https://cli.github.com/"
+    Write-Host "   [X] GitHub CLI (gh)" -ForegroundColor Red
+    Write-Host ""
+    Write-Error "GitHub CLI not found. Install from https://cli.github.com/"
     exit 1
+}
+else {
+    Write-Host "   [OK] GitHub CLI (gh)" -ForegroundColor Green
 }
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Error "[ERROR] Git not found. Install from https://git-scm.com/"
+    Write-Host "   [X] Git" -ForegroundColor Red
+    Write-Host ""
+    Write-Error "Git not found. Install from https://git-scm.com/"
     exit 1
 }
+else {
+    Write-Host "   [OK] Git" -ForegroundColor Green
+}
+Write-Host "   All prerequisites met!" -ForegroundColor Green
+Write-Host ""
 
 # --- CREATE LOCAL FOLDER ---
+Write-Host ">> Project Setup" -ForegroundColor Yellow
 $ProjectPath = Join-Path -Path $RootPath -ChildPath $Name
-if (Test-Path -Path $ProjectPath) {
-    Write-Error "[ERROR] Folder '$ProjectPath' already exists. Choose a different project name."
-    exit 1
-}
-New-Item -ItemType Directory -Path $ProjectPath | Out-Null
-Set-Location $ProjectPath
 
 # --- SET VISIBILITY ---
 $Visibility = if ($Private) { "private" } else { "public" }
 
 # --- CONFIRMATION ---
-Write-Host "`nProject Configuration:" -ForegroundColor Cyan
-Write-Host "  Name:        $Name"
-Write-Host "  Location:    $ProjectPath"
-Write-Host "  Template:    $UseTemplate"
-Write-Host "  Visibility:  $Visibility"
-Write-Host "  Description: $Description"
+Write-Host "================================================================" -ForegroundColor Magenta
+Write-Host "                  Project Configuration" -ForegroundColor Magenta
+Write-Host "================================================================" -ForegroundColor Magenta
+Write-Host " Name:        $Name" -ForegroundColor White
+Write-Host " Location:    $ProjectPath" -ForegroundColor White
+Write-Host " Template:    $UseTemplate" -ForegroundColor White
+Write-Host " Visibility:  $Visibility" -ForegroundColor $(if ($Private) { "Yellow" }else { "Green" })
+Write-Host " Description: $Description" -ForegroundColor White
+Write-Host "================================================================" -ForegroundColor Magenta
 Write-Host ""
 
-$Confirmation = Read-Host "Do you want to proceed create a github project? (Y/N)"
-if ($Confirmation -ne 'Y' -and $Confirmation -ne 'y') {
-    Write-Host "[CANCELLED] Project creation cancelled by user."
+Write-Host "Do you want to create a GitHub repository? (Y/N/S for Skip): " -ForegroundColor Yellow -NoNewline
+$GitHubConfirmation = Read-Host
+
+if ($GitHubConfirmation -eq "N" -or $GitHubConfirmation -eq "n") {
+    Write-Host ""
+    Write-Host "X Project creation cancelled by user." -ForegroundColor Red
     Remove-Item -Path $ProjectPath -Force -ErrorAction SilentlyContinue
+    Write-Host ""
     exit 0
 }
 
-# --- INIT OR TEMPLATE CLONE ---
-Write-Host "[INFO] Creating repo from template '$UseTemplate'..."
-gh repo create $Name --template $UseTemplate --$Visibility --description "$Description" --clone
+$CreateGitHub = ($GitHubConfirmation -eq "Y" -or $GitHubConfirmation -eq "y")
+Write-Host ""
 
-# --- OPEN IN VS CODE ---
-if ($OpenVSCode) {
-    if (Get-Command code -ErrorAction SilentlyContinue) {
-        code .
+# --- INIT OR TEMPLATE CLONE ---
+if ($CreateGitHub) {
+    Write-Host ">> GitHub Repository Creation" -ForegroundColor Yellow
+    Write-Host "   Creating repo from template..." -ForegroundColor Cyan
+    
+    # Ensure we're in the root path
+    Set-Location $RootPath
+    
+    # Create the repository and clone it
+    gh repo create $Name --template $UseTemplate --$Visibility --description "$Description" --clone
+    Write-Host "   [OK] Repository created" -ForegroundColor Green
+    
+    # Verify the clone worked, if not clone manually
+    if (-not (Test-Path $ProjectPath)) {
+        Write-Host "   Cloning repository..." -ForegroundColor Cyan
+        git clone "https://github.com/$((gh api user --jq .login))/$Name.git" $ProjectPath
+    }
+    
+    Write-Host "   [OK] Repository cloned to $ProjectPath" -ForegroundColor Green
+    Write-Host ""
+    
+    # Navigate into the cloned repository
+    Set-Location $ProjectPath
+    
+    # Delete start.ps1 if it exists
+    Write-Host ">> Cleaning Up Template Files" -ForegroundColor Yellow
+    if (Test-Path "start.ps1") {
+        Write-Host "   Removing start.ps1 from cloned repo..." -ForegroundColor Cyan
+        Remove-Item "start.ps1" -Force
+        Write-Host "   [OK] start.ps1 removed" -ForegroundColor Green
+        
+        # Commit and push changes
+        Write-Host "   Committing changes..." -ForegroundColor Cyan
+        git add -A
+        git commit -m "Remove start.ps1 from template"
+        Write-Host "   [OK] Changes committed" -ForegroundColor Green
+        
+        Write-Host "   Syncing with remote..." -ForegroundColor Cyan
+        git push
+        Write-Host "   [OK] Changes pushed to remote" -ForegroundColor Green
     }
     else {
-        Write-Host "[INFO] VS Code not found in PATH. Skipping..."
+        Write-Host "   [OK] No start.ps1 found in template" -ForegroundColor Green
     }
+    Write-Host ""
+}
+else {
+    Write-Host "   Creating project directory..." -ForegroundColor Cyan
+    New-Item -ItemType Directory -Path $ProjectPath | Out-Null
+    Set-Location $ProjectPath
+    Write-Host "   [OK] Directory created: $ProjectPath" -ForegroundColor Green
+    Write-Host ""
+    
+    Write-Host ">> Initializing Local Git Repository" -ForegroundColor Yellow
+    Write-Host "   Skipping GitHub repository creation..." -ForegroundColor Cyan
+    git init
+    Write-Host "   [OK] Local git repository initialized" -ForegroundColor Green
+    Write-Host ""
 }
 
-Write-Host "[SUCCESS] Project '$Name' created successfully!"
+# --- CREATE VSCODE WORKSPACE ---
+Write-Host ">> Creating VS Code Workspace" -ForegroundColor Yellow
+$WorkspaceFile = "$Name.code-workspace"
+$WorkspaceContent = @{
+    folders  = @(
+        @{
+            path = "."
+        }
+    )
+    settings = @{
+        "files.exclude" = @{
+            "**/.git" = $false
+        }
+    }
+} | ConvertTo-Json -Depth 10
+
+Set-Content -Path $WorkspaceFile -Value $WorkspaceContent -Encoding UTF8
+Write-Host "   [OK] Workspace file created: $WorkspaceFile" -ForegroundColor Green
+Write-Host ""
+
+# --- OPEN IN VS CODE ---
+Write-Host ">> Opening in VS Code" -ForegroundColor Yellow
+if (Get-Command code -ErrorAction SilentlyContinue) {
+    code $WorkspaceFile
+    Write-Host "   [OK] VS Code workspace opened" -ForegroundColor Green
+}
+else {
+    Write-Host "   [X] VS Code not found in PATH" -ForegroundColor Red
+}
+Write-Host ""
+
+
+# --- SUCCESS ---
+Write-Host ""
+Write-Host "================================================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "                     SUCCESS!" -ForegroundColor Green
+Write-Host ""
+Write-Host "  Project ""$Name"" has been created successfully!" -ForegroundColor Green
+Write-Host ""
+Write-Host "================================================================" -ForegroundColor Green
+Write-Host ""
