@@ -20,10 +20,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$Name,
 
-    [Parameter(Mandatory, HelpMessage = "Enter the root development folder (e.g., C:\dev)")]
     [ValidateNotNullOrEmpty()]
     [ValidateScript({ Test-Path $_ -PathType Container })]
-    [string]$RootPath,
+    [string]$RootPath = "C:\dev",
 
     [string]$Description = "",
 
@@ -57,9 +56,25 @@ Set-Location $ProjectPath
 # --- SET VISIBILITY ---
 $Visibility = if ($Private) { "private" } else { "public" }
 
+# --- CONFIRMATION ---
+Write-Host "`nProject Configuration:" -ForegroundColor Cyan
+Write-Host "  Name:        $Name"
+Write-Host "  Location:    $ProjectPath"
+Write-Host "  Template:    $UseTemplate"
+Write-Host "  Visibility:  $Visibility"
+Write-Host "  Description: $Description"
+Write-Host ""
+
+$Confirmation = Read-Host "Do you want to proceed create a github project? (Y/N)"
+if ($Confirmation -ne 'Y' -and $Confirmation -ne 'y') {
+    Write-Host "[CANCELLED] Project creation cancelled by user."
+    Remove-Item -Path $ProjectPath -Force -ErrorAction SilentlyContinue
+    exit 0
+}
+
 # --- INIT OR TEMPLATE CLONE ---
 Write-Host "[INFO] Creating repo from template '$UseTemplate'..."
-#gh repo create $Name --template $UseTemplate --$Visibility --description "$Description" --clone
+gh repo create $Name --template $UseTemplate --$Visibility --description "$Description" --clone
 
 # --- OPEN IN VS CODE ---
 if ($OpenVSCode) {
