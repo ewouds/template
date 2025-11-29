@@ -198,6 +198,7 @@ server/
 - Use meaningful test descriptions
 - Test error cases
 - Mock external dependencies
+- Use playwright for end-to-end tests
 
 ## Documentation Requirements
 

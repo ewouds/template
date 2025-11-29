@@ -20,6 +20,11 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$Name,
 
+    [Parameter(Mandatory, HelpMessage = "Enter the root development folder (e.g., C:\dev)")]
+    [ValidateNotNullOrEmpty()]
+    [ValidateScript({ Test-Path $_ -PathType Container })]
+    [string]$RootPath,
+
     [string]$Description = "",
 
     [bool]$Private = $true,
@@ -31,22 +36,30 @@ param(
 
 # --- PRECHECKS ---
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-    Write-Error "❌ GitHub CLI (gh) not found. Install from https://cli.github.com/"
+    Write-Error "[ERROR] GitHub CLI (gh) not found. Install from https://cli.github.com/"
     exit 1
 }
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Error "❌ Git not found. Install from https://git-scm.com/"
+    Write-Error "[ERROR] Git not found. Install from https://git-scm.com/"
     exit 1
 }
+
+# --- CREATE LOCAL FOLDER ---
+$ProjectPath = Join-Path -Path $RootPath -ChildPath $Name
+if (Test-Path -Path $ProjectPath) {
+    Write-Error "[ERROR] Folder '$ProjectPath' already exists. Choose a different project name."
+    exit 1
+}
+New-Item -ItemType Directory -Path $ProjectPath | Out-Null
+Set-Location $ProjectPath
 
 # --- SET VISIBILITY ---
 $Visibility = if ($Private) { "private" } else { "public" }
 
 # --- INIT OR TEMPLATE CLONE ---
-Write-Host "📦 Creating repo from template '$UseTemplate'..."
-gh repo create $Name --template $UseTemplate --$Visibility --description "$Description" --clone
-Set-Location $Name
+Write-Host "[INFO] Creating repo from template '$UseTemplate'..."
+#gh repo create $Name --template $UseTemplate --$Visibility --description "$Description" --clone
 
 # --- OPEN IN VS CODE ---
 if ($OpenVSCode) {
@@ -54,8 +67,8 @@ if ($OpenVSCode) {
         code .
     }
     else {
-        Write-Host "💡 VS Code not found in PATH. Skipping..."
+        Write-Host "[INFO] VS Code not found in PATH. Skipping..."
     }
 }
 
-Write-Host "✅ Project '$Name' created successfully!"
+Write-Host "[SUCCESS] Project '$Name' created successfully!"
